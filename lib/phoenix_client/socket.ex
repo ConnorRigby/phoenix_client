@@ -81,6 +81,7 @@ defmodule PhoenixClient.Socket do
     opts = Keyword.put_new(opts, :headers, [])
     heartbeat_interval = opts[:heartbeat_interval] || @heartbeat_interval
     reconnect_interval = opts[:reconnect_interval] || @reconnect_interval
+    event_handler_pid = opts[:event_handler_pid]
 
     transport_opts =
       Keyword.get(opts, :transport_opts, [])
@@ -106,7 +107,8 @@ defmodule PhoenixClient.Socket do
        transport_opts: transport_opts,
        transport_pid: nil,
        to_send_r: [],
-       ref: 0
+       ref: 0,
+       event_handler_pid: event_handler_pid
      }}
   end
 
@@ -157,10 +159,22 @@ defmodule PhoenixClient.Socket do
 
   @impl true
   def handle_info({:connected, transport_pid}, %{transport_pid: transport_pid} = state) do
+    if state.event_handler_pid do
+      send(state.event_handler_pid, {__MODULE__, self(), :connected})
+    end
+
     {:noreply, %{state | status: :connected}}
   end
 
   def handle_info({:disconnected, reason, transport_pid}, %{transport_pid: transport_pid} = state) do
+    if state.event_handler_pid do
+      send(state.event_handler_pid, {__MODULE__, self(), {:disconnected, reason}})
+    end
+
+    for {_, {pid, _ref}} <- state.channels do
+      send(pid, {__MODULE__, self(), {:disconnected, reason}})
+    end
+
     {:noreply, close(reason, state)}
   end
 

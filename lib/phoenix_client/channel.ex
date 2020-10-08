@@ -171,6 +171,11 @@ defmodule PhoenixClient.Channel do
     {:noreply, state}
   end
 
+  def handle_info({Socket, _socket_pid, {:disconnected, reason}}, %{caller: pid} = state) do
+    send(pid, {__MODULE__, self(), {:disconnected, reason}})
+    {:noreply, state}
+  end
+
   defp do_join(pid, timeout) do
     try do
       case GenServer.call(pid, :join, timeout) do
